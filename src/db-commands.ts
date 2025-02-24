@@ -1,7 +1,7 @@
 /**
  * MongoDB database command handler with security controls
  */
-import { Db } from "mongodb";
+import { Db, MongoClient } from "mongodb";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
@@ -52,45 +52,73 @@ function getMongoConfig() {
   };
 }
 
+// Reference variables for MongoDB client and database
+let mongoClient: MongoClient | null = null;
+let mongoDb: Db | null = null;
+
 /**
- * Establishes a connection to the configured MongoDB instance.
- *
- * This function is idempotent. If the connection is already established, it
- * simply returns without doing anything. If the connection is not established,
- * it attempts to connect to the configured MongoDB instance and authenticate
- * if credentials are provided.
- *
- * In case of a connection error, it returns an object with a single "text"
- * content item with the error message.
+ * Initialize MongoDB connection
+ * @param url MongoDB connection URL
+ * @returns True if connected successfully, false otherwise
  */
-async function connectToMongoDB() {
+export async function connectToMongoDB(url: string): Promise<boolean> {
   try {
-    const config = getMongoConfig();
-    client = new MongoClient(config.host, config.port);
-    db = client[config.database];
-    if (config.user && config.password) {
-      await db.authenticate(config.user, config.password);
+    // Close existing connection if any
+    if (mongoClient) {
+      await mongoClient.close();
+      mongoClient = null;
+      mongoDb = null;
     }
+    
+    // Create MongoDB client without serverApi configuration
+    mongoClient = new MongoClient(url);
+    await mongoClient.connect();
+    mongoDb = mongoClient.db();
+    return true;
   } catch (error) {
-    return {
-      contents: [
-        {
-          type: "text",
-          text: "Failed to connect to MongoDB",
-        },
-      ],
-    };
+    console.error("Failed to connect to MongoDB:", error);
+    return false;
   }
 }
 
-async function disconnectFromMongoDB() {
-  if (client) {
-    await client.close();
-    client = null;
-    db = null;
+/**
+ * Disconnect from MongoDB
+ */
+export async function disconnectFromMongoDB(): Promise<boolean> {
+  try {
+    if (mongoClient) {
+      await mongoClient.close();
+      mongoClient = null;
+      mongoDb = null;
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error("Failed to disconnect from MongoDB:", error);
+    return false;
   }
 }
 
+/**
+ * Get MongoDB client instance
+ */
+export function getMongoClient(): MongoClient | null {
+  return mongoClient;
+}
+
+/**
+ * Get MongoDB database instance
+ */
+export function getMongoDb(): Db | null {
+  return mongoDb;
+}
+
+/**
+ * Checks if MongoDB is connected
+ */
+export function isMongoConnected(): boolean {
+  return !!mongoClient && !!mongoDb;
+}
 
 /**
  * Creates a command error with the specified code and message
@@ -378,3 +406,51 @@ export const readCommandResultSchema = {
     required: ["filePath"]
   }
 };
+
+/**
+ * Tool schema for connecting to MongoDB
+ */
+export const connectToolSchema = {
+  name: "connect",
+  description: "Connect to the MongoDB server",
+  inputSchema: {
+    type: "object",
+    properties: {
+      host: {
+        type: "string",
+        description: "MongoDB server hostname (defaults to env var or localhost)"
+      },
+      port: {
+        type: "integer",
+        description: "MongoDB server port (defaults to env var or 27017)"
+      },
+      database: {
+        type: "string",
+        description: "MongoDB database name (defaults to env var)"
+      },
+      user: {
+        type: "string",
+        description: "MongoDB username (defaults to env var)"
+      },
+      password: {
+        type: "string",
+        description: "MongoDB password (defaults to env var)"
+      }
+    },
+    required: []
+  }
+};
+
+/**
+ * Tool schema for disconnecting from MongoDB
+ */
+export const disconnectToolSchema = {
+  name: "disconnect",
+  description: "Disconnect from the MongoDB server",
+  inputSchema: {
+    type: "object",
+    properties: {},
+    required: []
+  }
+};
+

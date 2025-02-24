@@ -22,7 +22,6 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { MongoClient, ServerApiVersion } from "mongodb";
 import { MongoCollection } from './types.js';
-import { commandToolSchema, executeCommand, readCommandResultSchema, readFileChunk } from './db-commands.js';
 
 /**
  * MongoDB connection client and database reference
@@ -53,8 +52,13 @@ const server = new Server(
  */
 async function connectToMongoDB(url: string) {
   try {
-    // Create MongoDB client without serverApi configuration
-    client = new MongoClient(url);
+    client = new MongoClient(url, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      },
+    });
     await client.connect();
     db = client.db();
     return true;
@@ -187,9 +191,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["collection", "pipeline"]
         }
-      },
-      commandToolSchema,
-      readCommandResultSchema
+      }
     ]
   };
 });
@@ -199,9 +201,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
  * Executes queries and returns results.
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const collection = db.collection(request.params.arguments?.collection);
+
   switch (request.params.name) {
     case "query": {
-      const collection = db.collection(request.params.arguments?.collection);
       const { filter, projection, limit } = request.params.arguments || {};
 
       // Validate collection name to prevent access to system collections
@@ -248,7 +251,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     case "aggregate": {
-      const collection = db.collection(request.params.arguments?.collection);
       const { pipeline } = request.params.arguments || {};
       if (!Array.isArray(pipeline)) {
         throw new Error("Pipeline must be an array");
@@ -277,99 +279,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
 
-    case "run_command": {
-      const { command, options = {} } = (request.params.arguments || {}) as {command: string, options: Record<string, any>}; 
-      if (!command || typeof command !== 'string') {
-        throw new Error("Command name is required");
-      }
-      
-      console.error('run_command called with:', { command, options });
-      
-      // Special case for collStats - bypass executeCommand and use direct aggregation
-      if (command === 'collStats') {
-        try {
-          const collName = options?.collection || options?.collStats || '';
-          if (!collName) {
-            throw new Error('Collection name is required for collStats');
-          }
-
-          // Check if we should write to a file
-          if (options.outputToFile) {
-            console.error(`Using file output for collStats on collection: ${collName}`);
-            // Execute command with special option to write large results to file
-            const result = await executeCommand(db, command, options);
-            return {
-              content: [{
-                type: "text",
-                text: JSON.stringify(result, null, 2)
-              }]
-            };
-          }
-          
-          // Default behavior using aggregation with $collStats
-          const collection = db.collection(collName);
-          console.error(`Getting stats for collection: ${collName} using aggregation`);
-          
-          // Try to execute with regular command first (may truncate if too large)
-          const result = await executeCommand(db, command, options);
-          
-          return {
-            content: [{
-              type: "text",
-              text: JSON.stringify(result, null, 2)
-            }]
-          };
-        } catch (error) {
-          console.error('Error handling collStats command:', error);
-          if (error instanceof Error) {
-            throw error;
-          }
-          throw new Error(`collStats command failed: ${JSON.stringify(error)}`);
-        }
-      }
-      
-      try {
-        // Execute other commands through the regular flow
-        const result = await executeCommand(db, command, options);
-        
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify(result, null, 2)
-          }]
-        };
-      } catch (error) {
-        if (error instanceof Error) {
-          throw error;
-        }
-        throw new Error(`Command execution failed: ${JSON.stringify(error)}`);
-      }
-    }
-    
-    case "read_command_result": {
-      const { filePath, offset = 0, length = 50000 } = (request.params.arguments || {}) as {filePath: string, offset?: number, length?: number};
-      
-      if (!filePath || typeof filePath !== 'string') {
-        throw new Error("File path is required");
-      }
-      
-      try {
-        const result = await readFileChunk(filePath, offset, length);
-        
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify(result, null, 2)
-          }]
-        };
-      } catch (error) {
-        if (error instanceof Error) {
-          throw error;
-        }
-        throw new Error(`Failed to read command result: ${JSON.stringify(error)}`);
-      }
-    }
-      
     default:
       throw new Error("Unknown tool");
   }
