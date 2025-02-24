@@ -25,9 +25,15 @@ A Model Context Protocol server that provides access to MongoDB databases. This 
   - All queries are executed with read-only permissions
 
 - **aggregate**
-  - Execute read-only MongoDB queries against the connected database
-  - Input: `aggregate` (object): The MongoDB query to execute
-  - All queries are executed with read-only permissions
+  - Execute read-only MongoDB aggregation pipelines against the connected database
+  - Input: `aggregate` (object): The MongoDB aggregation pipeline to execute
+  - All aggregations are executed with read-only permissions
+
+- **run_command**
+  - Execute specific read-only MongoDB database commands
+  - Input: `command` (string): The command to execute (limited to allowlisted commands)
+  - Input: `options` (object): Optional command parameters
+  - Supported commands: dbStats, collStats, serverStatus, buildInfo, connectionStatus, ping, hello, hostInfo, listCommands, features
 
 ### Prompts
 - `query` - Provide insights about the collection's structure, data types, and basic statistics

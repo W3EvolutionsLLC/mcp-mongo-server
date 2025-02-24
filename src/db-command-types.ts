@@ -26,7 +26,9 @@ export const ALLOWED_COMMANDS = [
   "hello",
   "hostInfo",
   "listCommands",
-  "features"
+  "features",
+  "connect",
+  "disconnect"
 ] as const;
 
 export type AllowedCommand = typeof ALLOWED_COMMANDS[number];
@@ -48,7 +50,9 @@ export const MongoCommandErrorCodeSchema = z.enum([
   "COMMAND_NOT_ALLOWED",
   "INVALID_COMMAND_STRUCTURE",
   "DANGEROUS_OPERATION",
-  "EXECUTION_ERROR"
+  "EXECUTION_ERROR",
+  "FILE_OPERATION_ERROR", // Added for file operations
+  "CONNECTION_ERROR"
 ]);
 
 export type MongoCommandErrorCode = z.infer<typeof MongoCommandErrorCodeSchema>;
