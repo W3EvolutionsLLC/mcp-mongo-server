@@ -132,6 +132,16 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const sample = await collection.findOne({});
     const indexes = await collection.indexes();
 
+    // Create type for index entries
+    type MongoIndex = {
+      name: string;
+      key: Record<string, number | string>;
+      unique?: boolean;
+      sparse?: boolean;
+      expireAfterSeconds?: number;
+      [key: string]: unknown;
+    };
+
     // Infer schema from sample document
     const schema = sample ? {
       type: "collection",
@@ -140,7 +150,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
         name: key,
         type: typeof value,
       })),
-      indexes: indexes.map((idx: any) => ({
+      indexes: indexes.map((idx: MongoIndex) => ({
         name: idx.name,
         keys: idx.key,
       })),
@@ -371,7 +381,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     case "run_command": {
-      const { command, options = {} } = (request.params.arguments || {}) as {command: string, options: Record<string, any>}; 
+      // Define stronger type for command options
+      type CommandOptions = {
+        collection?: string;
+        collStats?: string;
+        outputToFile?: boolean;
+        forceOutput?: boolean;
+        [key: string]: unknown;
+      };
+      
+      const { command, options = {} } = (request.params.arguments || {}) as {command: string, options: CommandOptions}; 
       if (!command || typeof command !== 'string') {
         return {
           content: [{

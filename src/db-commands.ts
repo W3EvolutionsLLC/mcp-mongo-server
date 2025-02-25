@@ -42,7 +42,13 @@ const MAX_RESPONSE_SIZE = 100000;
  * - `port`: 27017
  * - `database`: "test"
  */
-function getMongoConfig() {
+function getMongoConfig(): {
+  host: string;
+  port: number;
+  database: string;
+  user: string | undefined;
+  password: string | undefined;
+} {
   return {
     host: process.env.MONGO_HOST || "localhost",
     port: parseInt(process.env.MONGO_PORT || "27017", 10),
@@ -138,11 +144,27 @@ function createCommandError(
 }
 
 /**
+ * Sanitizes a file path to prevent path traversal attacks
+ * @param filePath The path to sanitize
+ * @returns Sanitized file path
+ */
+function sanitizeFilePath(filePath: string): string {
+  // Normalize the path to resolve '..' and '.' segments
+  const normalizedPath = path.normalize(filePath);
+  
+  // Get the basename to strip any directory components
+  const baseName = path.basename(normalizedPath);
+  
+  // Ensure the file is in the temp directory
+  return path.join(os.tmpdir(), baseName);
+}
+
+/**
  * Writes large command results to a temporary file
  * @param data Data to write to file
  * @returns Object with file path and information
  */
-async function writeResultToTempFile(data: any): Promise<{
+async function writeResultToTempFile(data: unknown): Promise<{
   filePath: string;
   size: number;
   timestamp: string;
@@ -203,7 +225,10 @@ export async function readFileChunk(
   hasMore: boolean;
 }> {
   try {
-    const handle = await fs.open(filePath, 'r');
+    // Sanitize the file path to prevent path traversal
+    const sanitizedPath = sanitizeFilePath(filePath);
+    
+    const handle = await fs.open(sanitizedPath, 'r');
     try {
       const stats = await fs.stat(filePath);
       const buffer = Buffer.alloc(length);
@@ -289,8 +314,8 @@ export function validateCommand(command: string, options: Record<string, any> = 
 export async function executeCommand(
   db: Db, 
   command: string, 
-  options: Record<string, any> = {}
-): Promise<any> {
+  options: Record<string, unknown> = {}
+): Promise<unknown> {
   try {
     // Extract options that control response handling
     const outputToFile = !!options.outputToFile;
