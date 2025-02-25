@@ -387,6 +387,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         collStats?: string;
         outputToFile?: boolean;
         forceOutput?: boolean;
+        timeout?: number;
         [key: string]: unknown;
       };
       
