@@ -20,8 +20,7 @@ import {
   GetPromptRequestSchema,
   ListResourceTemplatesRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { MongoClient, ServerApiVersion } from "mongodb";
-import { MongoCollection } from './types.js';
+// Removing unused imports
 import { 
   commandToolSchema, 
   executeCommand, 
@@ -36,18 +35,7 @@ import {
   isMongoConnected
 } from './db-commands.js';
 
-/**
- * MongoDB connection client and database reference
- * @deprecated Use the functions from db-commands.js instead
- */
-let client: MongoClient | null = null;
-let db: any = null;
-
-// Helper function to ensure backward compatibility
-function updateLegacyClientReferences() {
-  client = getMongoClient();
-  db = getMongoDb();
-}
+// Using the MongoDB connection state from db-commands.js exclusively
 
 /**
  * Create an MCP server with capabilities for resources (to list/read collections),
@@ -67,14 +55,7 @@ const server = new Server(
   }
 );
 
-/**
- * Initialize MongoDB connection (deprecated, use db-commands.js functions instead)
- */
-async function connectToMongoDBLegacy(url: string) {
-  const connected = await connectToMongoDB(url);
-  updateLegacyClientReferences();
-  return connected;
-}
+// Using connectToMongoDB from db-commands.js directly
 
 /**
  * Handler for listing available collections as resources.
@@ -85,7 +66,7 @@ async function connectToMongoDBLegacy(url: string) {
  */
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   // Check if MongoDB is connected
-  if (!client || !db) {
+  if (!isMongoConnected()) {
     return {
       resources: [],
       error: "Not connected to MongoDB. Please use the 'connect' tool first."
@@ -93,9 +74,16 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
   }
   
   try {
+    const db = getMongoDb();
+    if (!db) {
+      return {
+        resources: [],
+        error: "Not connected to MongoDB. Please use the 'connect' tool first."
+      };
+    }
     const collections = await db.listCollections().toArray();
     return {
-      resources: collections.map((collection: MongoCollection) => ({
+      resources: collections.map((collection) => ({
         uri: `mongodb:///${collection.name}`,
         mimeType: "application/json",
         name: collection.name,
@@ -116,7 +104,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
  */
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   // Check if MongoDB is connected
-  if (!client || !db) {
+  if (!isMongoConnected()) {
     return {
       contents: [{
         uri: request.params.uri,
@@ -130,6 +118,16 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   const collectionName = url.pathname.replace(/^\//, "");
 
   try {
+    const db = getMongoDb();
+    if (!db) {
+      return {
+        contents: [{
+          uri: request.params.uri,
+          mimeType: "application/json",
+          text: JSON.stringify({ error: "Not connected to MongoDB. Please use the 'connect' tool first." }, null, 2)
+        }]
+      };
+    }
     const collection = db.collection(collectionName);
     const sample = await collection.findOne({});
     const indexes = await collection.indexes();
@@ -238,7 +236,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Check if MongoDB is connected for tools that require it
-  if (!client && ['query', 'aggregate', 'run_command', 'read_command_result'].includes(request.params.name)) {
+  if (!isMongoConnected() && ['query', 'aggregate', 'run_command', 'read_command_result'].includes(request.params.name)) {
     return {
       content: [{
         type: "text",
@@ -249,7 +247,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   switch (request.params.name) {
     case "query": {
-      const collection = db.collection(request.params.arguments?.collection);
+      const db = getMongoDb();
+      if (!db) {
+        return {
+          content: [{
+            type: "text",
+            text: "Error: Not connected to MongoDB. Please use the 'connect' tool first."
+          }]
+        };
+      }
+      const collection = db.collection(String(request.params.arguments?.collection || ''));
       const { filter, projection, limit } = request.params.arguments || {};
 
       // Validate collection name to prevent access to system collections
@@ -291,8 +298,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Execute the find operation with error handling
       try {
         const cursor = collection.find(queryFilter, {
-          projection,
-          limit: limit || 100
+          projection: projection || undefined,
+          limit: typeof limit === 'number' ? limit : 100
         });
         const results = await cursor.toArray();
 
@@ -313,7 +320,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     case "aggregate": {
-      const collection = db.collection(request.params.arguments?.collection);
+      const db = getMongoDb();
+      if (!db) {
+        return {
+          content: [{
+            type: "text",
+            text: "Error: Not connected to MongoDB. Please use the 'connect' tool first."
+          }]
+        };
+      }
+      const collection = db.collection(String(request.params.arguments?.collection || ''));
       const { pipeline } = request.params.arguments || {};
       if (!Array.isArray(pipeline)) {
         return {
@@ -384,6 +400,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           if (options.outputToFile) {
             console.error(`Using file output for collStats on collection: ${collName}`);
             // Execute command with special option to write large results to file
+            const db = getMongoDb();
+            if (!db) {
+              return {
+                content: [{
+                  type: "text",
+                  text: "Error: Not connected to MongoDB. Please use the 'connect' tool first."
+                }]
+              };
+            }
             const result = await executeCommand(db, command, options);
             return {
               content: [{
@@ -394,6 +419,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }
           
           // Default behavior using aggregation with $collStats
+          const db = getMongoDb();
+          if (!db) {
+            return {
+              content: [{
+                type: "text",
+                text: "Error: Not connected to MongoDB. Please use the 'connect' tool first."
+              }]
+            };
+          }
           const collection = db.collection(collName);
           console.error(`Getting stats for collection: ${collName} using aggregation`);
           
@@ -419,6 +453,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
       try {
         // Execute other commands through the regular flow
+        const db = getMongoDb();
+        if (!db) {
+          return {
+            content: [{
+              type: "text",
+              text: "Error: Not connected to MongoDB. Please use the 'connect' tool first."
+            }]
+          };
+        }
         const result = await executeCommand(db, command, options);
         
         return {
@@ -477,7 +520,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         
         // Add credentials if provided
         if (user && password) {
-          url += `${encodeURIComponent(user)}:${encodeURIComponent(password)}@`;
+          url += `${encodeURIComponent(String(user))}:${encodeURIComponent(String(password))}@`;
         }
         
         // Add host and port
@@ -490,7 +533,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         
         // Connect to MongoDB
         const connected = await connectToMongoDB(url);
-        updateLegacyClientReferences();
         
         if (connected) {
           return {
@@ -520,7 +562,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     case "disconnect": {
       try {
         const disconnected = await disconnectFromMongoDB();
-        updateLegacyClientReferences();
         
         if (disconnected) {
           return {
@@ -614,7 +655,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
   }
   
   // Check if MongoDB is connected
-  if (!client || !db) {
+  if (!isMongoConnected()) {
     return {
       messages: [
         {
@@ -629,6 +670,20 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
   }
 
   try {
+    const db = getMongoDb();
+    if (!db) {
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: "Not connected to MongoDB. Please use the 'connect' tool first."
+            }
+          }
+        ]
+      };
+    }
     const collection = db.collection(collectionName);
 
     // Validate collection name to prevent access to system collections
@@ -753,7 +808,7 @@ async function main() {
     process.exit(1);
   }
 
-  const connected = await connectToMongoDBLegacy(args[0]);
+  const connected = await connectToMongoDB(args[0]);
   if (!connected) {
     console.error("Failed to connect to MongoDB");
     process.exit(1);

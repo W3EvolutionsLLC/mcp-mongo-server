@@ -1,7 +1,7 @@
 /**
  * MongoDB database command handler with security controls
  */
-import { Db, MongoClient } from "mongodb";
+import { Db, MongoClient, ServerApiVersion } from "mongodb";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
@@ -70,8 +70,14 @@ export async function connectToMongoDB(url: string): Promise<boolean> {
       mongoDb = null;
     }
     
-    // Create MongoDB client without serverApi configuration
-    mongoClient = new MongoClient(url);
+    // Create MongoDB client with serverApi configuration
+    mongoClient = new MongoClient(url, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      },
+    });
     await mongoClient.connect();
     mongoDb = mongoClient.db();
     return true;
