@@ -9,7 +9,8 @@ import {
   ALLOWED_COMMANDS, 
   DANGEROUS_OPERATORS,
   MongoCommandError,
-  MongoCommandErrorCode
+  MongoCommandErrorCode,
+  AllowedCommand
 } from "./db-command-types.js";
 
 // Maximum size (in chars) for direct response before using temp file
@@ -266,9 +267,9 @@ export async function readFileChunk(
  * @param options Additional command options
  * @throws MongoCommandError if the command is not allowed or contains dangerous operations
  */
-export function validateCommand(command: string, options: Record<string, any> = {}): void {
+export function validateCommand(command: string, options: Record<string, unknown> = {}): void {
   // Check if command is in allowlist
-  if (!ALLOWED_COMMANDS.includes(command as any)) {
+  if (!ALLOWED_COMMANDS.includes(command as AllowedCommand)) {
     throw createCommandError(
       "COMMAND_NOT_ALLOWED",
       `Command '${command}' is not allowed. Allowed commands: ${ALLOWED_COMMANDS.join(', ')}`
@@ -283,7 +284,7 @@ export function validateCommand(command: string, options: Record<string, any> = 
   // Prevent command injection 
   const commandKeys = Object.keys(commandObj);
   for (const key of commandKeys) {
-    if (key !== command && ALLOWED_COMMANDS.includes(key as any)) {
+    if (key !== command && ALLOWED_COMMANDS.includes(key as AllowedCommand)) {
       throw createCommandError(
         "INVALID_COMMAND_STRUCTURE",
         `Invalid command structure: Contains another command key '${key}'`
