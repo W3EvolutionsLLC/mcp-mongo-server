@@ -17,7 +17,7 @@
 - [ ] **Security Enhancements**
   - [ ] Add rate limiting for resource-intensive operations (P2)
   - [x] Sanitize file paths before returning them to clients (P0)
-  - [ ] Consider adding request timeouts for long-running operations (P1)
+  - [x] Consider adding request timeouts for long-running operations (P1)
 
 - [ ] **Documentation**
   - [ ] Add JSDoc comments for all exported functions (P1)

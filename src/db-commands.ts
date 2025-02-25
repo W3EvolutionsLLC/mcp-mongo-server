@@ -16,6 +16,48 @@ import {
 // Maximum size (in chars) for direct response before using temp file
 const MAX_RESPONSE_SIZE = 100000;
 
+// Default timeout for operations (in milliseconds)
+const DEFAULT_TIMEOUT = 30000; // 30 seconds
+
+/**
+ * Creates a command error with the specified code and message
+ */
+function createCommandError(
+  code: MongoCommandErrorCode, 
+  message: string, 
+  details?: unknown
+): MongoCommandError {
+  return { code, message, details };
+}
+
+/**
+ * Execute a promise with a timeout
+ * @param promise The promise to execute
+ * @param timeoutMs Timeout in milliseconds
+ * @param errorMessage Custom error message
+ * @returns Promise result
+ */
+async function withTimeout<T>(
+  promise: Promise<T>, 
+  timeoutMs: number = DEFAULT_TIMEOUT, 
+  errorMessage: string = "Operation timed out"
+): Promise<T> {
+  // Create a timeout promise that rejects after specified time
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    const timeoutId = setTimeout(() => {
+      clearTimeout(timeoutId);
+      reject(createCommandError(
+        "TIMEOUT_ERROR",
+        errorMessage,
+        { timeoutMs }
+      ));
+    }, timeoutMs);
+  });
+  
+  // Race the original promise against the timeout
+  return Promise.race([promise, timeoutPromise]);
+}
+
 /**
  * Returns a configuration object for connecting to MongoDB.
  *
@@ -131,17 +173,6 @@ export function getMongoDb(): Db | null {
  */
 export function isMongoConnected(): boolean {
   return !!mongoClient && !!mongoDb;
-}
-
-/**
- * Creates a command error with the specified code and message
- */
-function createCommandError(
-  code: MongoCommandErrorCode, 
-  message: string, 
-  details?: unknown
-): MongoCommandError {
-  return { code, message, details };
 }
 
 /**
@@ -321,11 +352,13 @@ export async function executeCommand(
     // Extract options that control response handling
     const outputToFile = !!options.outputToFile;
     const forceOutput = !!options.forceOutput;
+    const timeout = typeof options.timeout === 'number' ? options.timeout : DEFAULT_TIMEOUT;
     
     // Remove our custom options before passing to MongoDB
     const cleanOptions = { ...options };
     delete cleanOptions.outputToFile;
     delete cleanOptions.forceOutput;
+    delete cleanOptions.timeout;
     
     // Perform security validation
     validateCommand(command, cleanOptions);
@@ -354,8 +387,12 @@ export async function executeCommand(
       commandObj = { [command]: cleanOptions?.collection || 1, ...cleanOptions };
     }
     
-    // Execute the validated command
-    const result = await db.command(commandObj);
+    // Execute the validated command with timeout
+    const result = await withTimeout(
+      db.command(commandObj),
+      timeout,
+      `Command '${command}' timed out after ${timeout}ms`
+    );
     
     // Calculate result size before serialization (for estimation)
     const resultJson = JSON.stringify(result);
@@ -406,7 +443,7 @@ export const commandToolSchema = {
       },
       options: {
         type: "object",
-        description: "Command options with additional parameters: outputToFile (boolean) to write large results to a temp file, forceOutput (boolean) to force direct output"
+        description: "Command options with additional parameters: outputToFile (boolean) to write large results to a temp file, forceOutput (boolean) to force direct output, timeout (number) in ms for operation timeout"
       }
     },
     required: ["command"]
@@ -485,4 +522,3 @@ export const disconnectToolSchema = {
     required: []
   }
 };
-

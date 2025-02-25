@@ -52,7 +52,8 @@ export const MongoCommandErrorCodeSchema = z.enum([
   "DANGEROUS_OPERATION",
   "EXECUTION_ERROR",
   "FILE_OPERATION_ERROR", // Added for file operations
-  "CONNECTION_ERROR"
+  "CONNECTION_ERROR",
+  "TIMEOUT_ERROR" // Added for request timeouts
 ]);
 
 export type MongoCommandErrorCode = z.infer<typeof MongoCommandErrorCodeSchema>;
