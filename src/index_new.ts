@@ -132,33 +132,25 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const sample = await collection.findOne({});
     const indexes = await collection.indexes();
 
-    // Create type for index entries
-    type MongoIndex = {
-      name: string;
-      key: Record<string, number | string>;
-      unique?: boolean;
-      sparse?: boolean;
-      expireAfterSeconds?: number;
-      [key: string]: unknown;
-    };
+    const fields = Object.entries(sample || {}).map(([key, value]) => ({
+      name: key,
+      type: typeof value,
+    }));
 
     // Infer schema from sample document
     const schema = sample ? {
       type: "collection",
       name: collectionName,
-      fields: Object.entries(sample).map(([key, value]) => ({
-        name: key,
-        type: typeof value,
-      })),
-      indexes: indexes.map((idx: MongoIndex) => ({
+      fields,
+      indexes: indexes.map(idx => ({
         name: idx.name,
-        keys: idx.key,
+        keys: idx.key
       })),
     } : {
       type: "collection",
       name: collectionName,
-      fields: [],
-      indexes: [],
+      fields,
+      indexes,
     };
 
     return {
