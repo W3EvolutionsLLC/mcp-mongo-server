@@ -10,7 +10,8 @@
 
 - [x] **Type Safety Enhancement** (P1)
   - [x] Replace generic `any` types with more specific types from type definitions in critical areas (P0 items)
-  - [ ] Replace remaining type usage (see matrix below)
+  - [x] Fix remaining `any` types in validateCommand function
+  - [ ] Replace remaining type usage in types.ts (see matrix below)
   - [ ] Consider using Zod validations more consistently throughout the codebase
 
 - [ ] **Security Enhancements**
@@ -36,7 +37,9 @@
 | index_new.ts | ~338 | `const { command, options = {} } = (request.params.arguments || {}) as {command: string, options: Record<string, any>};` | Use a more specific type for options from db-command-types.ts | P0 | ✅ |
 | db-commands.ts | ~49 | `function getMongoConfig()` | Add return type annotation | P2 | ✅ |
 | db-commands.ts | ~138 | `async function writeResultToTempFile(data: any)` | Define a specific return type | P1 | ✅ |
+| db-commands.ts | ~265 | `validateCommand(command: string, options: Record<string, any>)` | Use Record<string, unknown> | P0 | ✅ |
 | db-commands.ts | ~284 | `options: Record<string, any> = {}` | Use more specific type from db-command-types.ts | P0 | ✅ |
+| db-commands.ts | ~267-282 | `command as any` and `key as any` | Use AllowedCommand type | P1 | ✅ |
 | types.ts | ~11 | `keys: z.record(z.union([z.number(), z.string()])),` | Could be more specifically typed | P2 | ❌ |
 | types.ts | ~32 | `$expr: z.unknown().optional(),` | Consider more specific typing if possible | P3 | ❌ |
 | types.ts | ~64 | `pipeline: z.array(z.record(z.unknown())),` | Consider adding schema for common aggregation stages | P2 | ❌ |
